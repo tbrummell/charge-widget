@@ -8,31 +8,29 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
     background: #0e0e1c;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
     overflow: hidden;
   }
   .ticker-wrap {
     background: #1a1a2e;
     border-radius: 8px;
     overflow: hidden;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-family: 'Segoe UI', Arial, sans-serif;
     user-select: none;
     width: 100%;
-    max-width: 900px;
+    max-width: 850px;
     box-shadow: 0 4px 15px rgba(0,0,0,0.5);
   }
   .ticker-inner {
     display: flex;
     align-items: stretch;
-    height: 95px; /* Increased height for logos */
+    height: 85px;
   }
   .games-viewport {
     flex: 1;
     overflow: hidden;
+    position: relative;
   }
   .games-track {
     display: flex;
@@ -40,63 +38,64 @@
     transition: transform 0.5s ease-in-out;
   }
   .game-card {
-    flex: 0 0 210px;
+    flex: 0 0 170px; /* Fixed width to prevent "stopped scrolling" look */
     height: 100%;
     border-right: 1px solid #2a2a44;
-    padding: 12px 15px;
+    padding: 10px 15px;
     display: flex;
     flex-direction: column;
     justify-content: center;
     color: #e0e0e0;
-    font-size: 14px;
-    position: relative;
+    font-size: 13px;
   }
   .team-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 4px;
+    margin-bottom: 3px;
   }
   .team-info {
     display: flex;
     align-items: center;
     gap: 8px;
   }
-  .team-row.winner {
-    color: #fff;
-    font-weight: bold;
-  }
+  .team-abbr.ottawa { color: #fff; font-weight: bold; }
   .score {
-    font-variant-numeric: tabular-nums;
-    font-weight: bold;
+    font-weight: 800;
+    font-size: 16px;
+    color: #fff;
   }
+  .score.winner { color: #e8c96a; }
+
   .game-status {
-    font-size: 11px;
-    color: #8888b0;
+    font-size: 10px;
+    color: #555577;
     text-transform: uppercase;
     margin-top: 4px;
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
-  /* Win/Loss Badge Styles */
   .badge {
-    padding: 1px 5px;
+    padding: 1px 4px;
     border-radius: 3px;
     font-weight: bold;
-    font-size: 10px;
-    margin-left: 5px;
+    font-size: 9px;
   }
   .win { background: #2e7d32; color: #fff; }
   .loss { background: #c62828; color: #fff; }
 
-  #update-label {
-    position: absolute;
-    bottom: 5px;
-    right: 10px;
+  .ticker-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111122;
+    padding: 4px 12px;
+    height: 24px;
     font-size: 9px;
     color: #444466;
   }
+  .footer-brand span { color: #C8102E; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -104,130 +103,115 @@
 <div class="ticker-wrap">
   <div class="ticker-inner">
     <div class="games-viewport">
-      <div class="games-track" id="games-track">
-        </div>
+      <div class="games-track" id="track">
+        <div style="padding: 20px; color: #444466;">Loading Charge Schedule...</div>
+      </div>
     </div>
   </div>
-  <div id="update-label">Updating...</div>
+  <div class="ticker-footer">
+    <div>OTTAWA <span>CHARGE</span> &nbsp;·&nbsp; PWHL 2025–26</div>
+    <div id="update-label">↻ refreshing...</div>
+  </div>
 </div>
 
 <script>
-// Corrected schedule and IDs for March 2026 based on official results
 const ALL_GAMES = [
-  { id: 277, date: '2026-03-04', home: 'OTT', away: 'SEA', time: '7:00 PM' }, // 4-3 W
-  { id: 279, date: '2026-03-08', home: 'NY',  away: 'OTT', time: '3:00 PM' }, // 2-6 L
-  { id: 285, date: '2026-03-14', home: 'VAN', away: 'OTT', time: '3:00 PM' }, // 3-2 W (OT)
-  { id: 290, date: '2026-03-18', home: 'MIN', away: 'OTT', time: '7:00 PM' }, // 0-5 L
-  { id: 295, date: '2026-03-22', home: 'OTT', away: 'MTL', time: '7:00 PM' }, // 2-1 W (OT)
-  { id: 303, date: '2026-03-29', home: 'SEA', away: 'OTT', time: '7:00 PM' }  // Next Game
+  { id: 277, date: '2026-03-04', away: 'SEA', home: 'OTT' }, // 4-3 W
+  { id: 279, date: '2026-03-08', away: 'OTT', home: 'NY'  }, // 2-6 L
+  { id: 285, date: '2026-03-14', away: 'VAN', home: 'OTT' }, // 3-2 W
+  { id: 290, date: '2026-03-18', away: 'OTT', home: 'MIN' }, // 0-5 L
+  { id: 295, date: '2026-03-22', away: 'MTL', home: 'OTT' }, // 2-1 W (LAST NIGHT)
+  { id: 303, date: '2026-03-29', away: 'OTT', home: 'SEA' }, // NEXT
+  { id: 306, date: '2026-04-01', away: 'TOR', home: 'OTT' }
 ];
 
 const TEAM_COLORS = {
-  'OTT': '#C8102E', 'MTL': '#862633', 'MIN': '#4A2A2A',
-  'NY': '#003366', 'SEA': '#006400', 'VAN': '#00205B',
-  'TOR': '#00205B', 'BOS': '#FFD700'
+  'OTT': '#C8102E', 'MTL': '#862633', 'MIN': '#154734',
+  'NY': '#003366', 'SEA': '#005C5C', 'VAN': '#00843D',
+  'TOR': '#307FE2', 'BOS': '#FFD700'
 };
 
 function teamLogo(abbr) {
   const color = TEAM_COLORS[abbr] || '#555';
-  return `<svg width="22" height="22" viewBox="0 0 24 24" style="border-radius:50%">
-    <circle cx="12" cy="12" r="11" fill="${color}"/>
-    <text x="12" y="16" font-size="9" font-weight="900" fill="#fff" text-anchor="middle" font-family="sans-serif">${abbr}</text>
+  return `<svg width="18" height="18" viewBox="0 0 20 20">
+    <circle cx="10" cy="10" r="9" fill="${color}"/>
+    <text x="10" y="13.5" font-size="6" font-weight="900" fill="#fff" text-anchor="middle" font-family="sans-serif">${abbr}</text>
   </svg>`;
 }
 
 async function fetchScores() {
   const url = 'https://www.thepwhl.com/en/scores';
-  const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
   try {
-    const resp = await fetch(proxy);
+    const resp = await fetch('https://api.allorigins.win/get?url=' + encodeURIComponent(url));
     const data = await resp.json();
     const html = data.contents;
     const results = {};
 
-    // Split by Game Center links to isolate each game block
     html.split(/game-center\//).forEach(chunk => {
       const idM = chunk.match(/^(\d+)/);
       if(!idM) return;
       const id = parseInt(idM[1]);
-      const slice = chunk.slice(0, 1200); // Larger slice to capture scores
+      const slice = chunk.slice(0, 1500);
 
       const isFinal = /Final|FINAL/i.test(slice);
-      const isLive = /(1st|2nd|3rd|OT|SO)\s*Period|Live|In\s*Progress/i.test(slice);
+      const isLive = /(1st|2nd|3rd|OT|SO)\s*Period|Live/i.test(slice);
 
-      let statusText = null;
-      if(isFinal) {
-        statusText = 'Final';
-        if(/OT/i.test(slice)) statusText += ' (OT)';
-        if(/SO/i.test(slice)) statusText += ' (SO)';
-      } else if(isLive) {
-        const pm = slice.match(/(1st|2nd|3rd|OT|SO)\s*Period/i);
-        statusText = pm ? pm[0] : 'Live';
-      }
-
-      // Find all numbers within tags like >1<
+      // Look for numbers wrapped in HTML tags (standard scoreboard pattern)
       const nums = [...slice.matchAll(/>(\d+)</g)].map(x => parseInt(x[1])).filter(n => n >= 0 && n <= 15);
 
       let awayScore, homeScore;
       if((isFinal || isLive) && nums.length >= 2) {
-        // PWHL lists Away then Home in scoreboards
         awayScore = nums[0];
         homeScore = nums[1];
       }
 
-      results[id] = { awayScore, homeScore, statusText, isFinal, isLive };
+      results[id] = { awayScore, homeScore, isFinal, isLive };
     });
     return results;
-  } catch(e) {
-    console.error("Score fetch error:", e);
-    return {};
-  }
+  } catch(e) { return {}; }
 }
 
-function buildCards(scoreData) {
-  const track = document.getElementById('games-track');
+function buildCards(scoreMap) {
+  const track = document.getElementById('track');
   track.innerHTML = '';
+  const today = new Date().setHours(0,0,0,0);
 
   ALL_GAMES.forEach(game => {
     const card = document.createElement('div');
     card.className = 'game-card';
-    const res = scoreData[game.id] || {};
-    const isPast = new Date(game.date) < new Date().setHours(0,0,0,0);
+    const res = scoreMap[game.id] || {};
+    const isPast = new Date(game.date) < today;
 
-    // Ottawa Win/Loss Logic
+    // Win/Loss Calculation
     let resultBadge = '';
-    if (res.isFinal) {
-      const isOttHome = (game.home === 'OTT');
+    if (res.isFinal || (isPast && res.awayScore !== undefined)) {
+      const isOttHome = game.home === 'OTT';
       const ottScore = isOttHome ? res.homeScore : res.awayScore;
       const oppScore = isOttHome ? res.awayScore : res.homeScore;
-
-      if (ottScore > oppScore) {
-        resultBadge = '<span class="badge win">W</span>';
-      } else if (ottScore < oppScore) {
-        resultBadge = '<span class="badge loss">L</span>';
-      }
+      if (ottScore > oppScore) resultBadge = '<span class="badge win">W</span>';
+      else if (ottScore < oppScore) resultBadge = '<span class="badge loss">L</span>';
     }
 
-    const awayWinner = res.isFinal && res.awayScore > res.homeScore;
-    const homeWinner = res.isFinal && res.homeScore > res.awayScore;
+    const awayWon = res.isFinal && res.awayScore > res.homeScore;
+    const homeWon = res.isFinal && res.homeScore > res.awayScore;
 
     card.innerHTML = `
-      <div class="team-row ${awayWinner ? 'winner' : ''}">
+      <div class="team-row">
         <div class="team-info">
           ${teamLogo(game.away)}
-          <span>${game.away}</span>
+          <span class="team-abbr ${game.away==='OTT'?'ottawa':''}">${game.away}</span>
         </div>
-        <span class="score">${res.awayScore !== undefined ? res.awayScore : ''}</span>
+        <span class="score ${awayWon?'winner':''}">${res.awayScore ?? ''}</span>
       </div>
-      <div class="team-row ${homeWinner ? 'winner' : ''}">
+      <div class="team-row">
         <div class="team-info">
           ${teamLogo(game.home)}
-          <span>${game.home}</span>
+          <span class="team-abbr ${game.home==='OTT'?'ottawa':''}">${game.home}</span>
         </div>
-        <span class="score">${res.homeScore !== undefined ? res.homeScore : ''}</span>
+        <span class="score ${homeWon?'winner':''}">${res.homeScore ?? ''}</span>
       </div>
       <div class="game-status">
-        <span>${res.statusText || (isPast ? 'Final' : game.time)}</span>
+        <span>${res.isFinal ? 'Final' : (isPast ? 'Final' : game.date.split('-').slice(1).join('/'))}</span>
         ${resultBadge}
       </div>
     `;
@@ -236,15 +220,13 @@ function buildCards(scoreData) {
 }
 
 async function init() {
-  document.getElementById('update-label').textContent = 'Updating...';
   const scores = await fetchScores();
   buildCards(scores);
-  document.getElementById('update-label').textContent = 'Last Updated: ' + new Date().toLocaleTimeString();
+  document.getElementById('update-label').textContent = 'Last Updated: ' + new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 }
 
 init();
-setInterval(init, 300000); // Refresh every 5 minutes
+setInterval(init, 300000); // 5-minute refresh
 </script>
-
 </body>
 </html>
