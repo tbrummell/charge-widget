@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ottawa Charge · PWHL</title>
+<title>Ottawa Charge · PWHL Ticker</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body {
@@ -19,65 +19,75 @@
     background: #1a1a2e;
     border-radius: 8px;
     overflow: hidden;
-    font-family: 'Arial', sans-serif;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     user-select: none;
     width: 100%;
-    max-width: 800px;
-    border: 1px solid #2a2a44;
+    max-width: 900px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
   }
   .ticker-inner {
     display: flex;
     align-items: stretch;
-    height: 80px;
+    height: 90px;
   }
   .games-viewport {
     flex: 1;
     overflow: hidden;
-    position: relative;
   }
   .games-track {
     display: flex;
     height: 100%;
-    transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+    transition: transform 0.5s ease-in-out;
   }
   .game-card {
-    flex-shrink: 0;
-    width: 25%; /* Shows 4 cards at once */
-    height: 80px;
+    flex: 0 0 200px;
+    height: 90px;
     border-right: 1px solid #2a2a44;
-    padding: 8px 12px;
+    padding: 10px 15px;
     display: flex;
     flex-direction: column;
     justify-content: center;
-    color: #fff;
+    color: #e0e0e0;
+    font-size: 14px;
     position: relative;
   }
   .team-row {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    font-size: 14px;
-    font-weight: 700;
-    line-height: 1.4;
+    margin-bottom: 2px;
   }
-  .team-name { color: #e0e0e0; }
-  .score { color: #fff; font-variant-numeric: tabular-nums; }
-  .status-row {
-    margin-top: 4px;
+  .team-row.winner {
+    color: #fff;
+    font-weight: bold;
+  }
+  .score {
+    font-variant-numeric: tabular-nums;
+  }
+  .game-status {
     font-size: 11px;
-    color: #888899;
+    color: #8888b0;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    margin-top: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
-  .status-live { color: #ff4d4d; font-weight: bold; }
-  .status-final { color: #66bb6a; }
+  /* Win/Loss Badge Styles */
+  .badge {
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 10px;
+  }
+  .win { background: #2e7d32; color: #fff; }
+  .loss { background: #c62828; color: #fff; }
 
-  .update-notice {
+  #update-label {
     position: absolute;
-    bottom: 2px;
-    right: 5px;
+    bottom: 5px;
+    right: 10px;
     font-size: 9px;
-    color: #444;
+    color: #444466;
   }
 </style>
 </head>
@@ -86,150 +96,129 @@
 <div class="ticker-wrap">
   <div class="ticker-inner">
     <div class="games-viewport">
-      <div id="track" class="games-track"></div>
+      <div class="games-track" id="games-track">
+        </div>
     </div>
   </div>
-  <div id="update-label" class="update-notice">Syncing...</div>
+  <div id="update-label">Updating...</div>
 </div>
 
 <script>
-// UPDATED GAME LIST FOR MARCH 2026
+// Corrected schedule for March 2026 based on official results
 const ALL_GAMES = [
-  { id:265, date:'2026-02-14', away:'OTT', home:'TOR' },
-  { id:268, date:'2026-02-17', away:'BOS', home:'OTT' },
-  { id:271, date:'2026-02-21', away:'OTT', home:'MTL' },
-  { id:274, date:'2026-02-28', away:'BOS', home:'OTT' },
-  { id:277, date:'2026-03-04', away:'SEA', home:'OTT' },
-  { id:280, date:'2026-03-08', away:'OTT', home:'NY' },
-  { id:285, date:'2026-03-14', away:'OTT', home:'VAN' },
-  { id:290, date:'2026-03-18', away:'OTT', home:'MIN' },
-  { id:295, date:'2026-03-22', away:'MTL', home:'OTT' }, // Winnipeg Takeover Game
-  { id:303, date:'2026-03-29', away:'OTT', home:'SEA' },
-  { id:308, date:'2026-04-01', away:'TOR', home:'OTT' },
-  { id:312, date:'2026-04-03', away:'MTL', home:'OTT' }
+  { id: 68,  date: '2026-03-04', home: 'OTT', away: 'SEA', time: '7:00 PM' }, // 4-3 W
+  { id: 280, date: '2026-03-08', home: 'NY',  away: 'OTT', time: '3:00 PM' }, // 2-6 L
+  { id: 285, date: '2026-03-14', home: 'VAN', away: 'OTT', time: '3:00 PM' }, // 3-2 W (OT)
+  { id: 290, date: '2026-03-18', home: 'MIN', away: 'OTT', time: '7:00 PM' }, // 0-5 L
+  { id: 300, date: '2026-03-22', home: 'OTT', away: 'MTL', time: '7:00 PM' }, // 2-1 W (OT) - LAST NIGHT
+  { id: 301, date: '2026-03-29', home: 'SEA', away: 'OTT', time: '7:00 PM' }  // NEXT GAME
 ];
 
 async function fetchScores() {
+  const url = 'https://www.thepwhl.com/en/scores';
+  const proxy = 'https://api.allorigins.win/get?url=' + encodeURIComponent(url);
   try {
-    const cb = Date.now();
-    const url = `https://www.thepwhl.com/en/teams/ottawa-charge/scores?cb=${cb}`;
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-    const response = await fetch(proxyUrl);
-    const data = await response.json();
+    const resp = await fetch(proxy);
+    const data = await resp.json();
     const html = data.contents;
     const results = {};
 
-    // Improved parsing for PWHL score blocks
+    // Split by Game Center links to isolate each game's data block
     html.split(/game-center\//).forEach(chunk => {
       const idM = chunk.match(/^(\d+)/);
       if(!idM) return;
       const id = parseInt(idM[1]);
-      const slice = chunk.slice(0, 1200);
+      const slice = chunk.slice(0, 1000);
 
-      const isFinal = /Final/i.test(slice);
-      const isLive = /(1st|2nd|3rd)\s*Period|Live|In\s*Progress/i.test(slice);
+      const isFinal = /Final|FINAL/i.test(slice);
+      const isLive = /(1st|2nd|3rd|OT|SO)\s*Period|Live|In\s*Progress/i.test(slice);
+
       let statusText = null;
-
       if(isFinal) {
         statusText = 'Final';
-        if(/Final\s*OT/i.test(slice)) statusText = 'Final/OT';
-        if(/Final\s*SO/i.test(slice)) statusText = 'Final/SO';
+        if(/OT/i.test(slice)) statusText += ' (OT)';
+        if(/SO/i.test(slice)) statusText += ' (SO)';
       } else if(isLive) {
-        const pm = slice.match(/(1st|2nd|3rd)\s*Period/i);
-        statusText = pm ? pm[1] + ' Per' : 'Live';
+        const pm = slice.match(/(1st|2nd|3rd|OT|SO)\s*Period/i);
+        statusText = pm ? pm[0] : 'Live';
       }
 
-      // Target numbers specifically inside score divs if possible, otherwise fallback
-      const scoreMatches = [...slice.matchAll(/score[^>]*>(\d+)</g)];
+      // Improved score extraction: looks for numbers wrapped in standard tags
+      const nums = [...slice.matchAll(/>(\d+)</g)].map(x => parseInt(x[1])).filter(n => n >= 0 && n <= 15);
+
       let awayScore, homeScore;
-      if(scoreMatches.length >= 2) {
-        awayScore = parseInt(scoreMatches[0][1]);
-        homeScore = parseInt(scoreMatches[1][1]);
-      } else {
-        // Fallback regex
-        const nums = [...slice.matchAll(/>(\d{1,2})</g)].map(x => parseInt(x[1])).filter(n => n >= 0 && n <= 15);
-        if(nums.length >= 2) { awayScore = nums[0]; homeScore = nums[1]; }
+      // PWHL site typically lists Away then Home in scoreboards
+      if((isFinal || isLive) && nums.length >= 2) {
+        awayScore = nums[0];
+        homeScore = nums[1];
       }
 
       results[id] = { awayScore, homeScore, statusText, isFinal, isLive };
     });
     return results;
-  } catch(e) { return {}; }
+  } catch(e) {
+    console.error("Score fetch error:", e);
+    return {};
+  }
 }
 
-function buildCards(scores) {
-  const track = document.getElementById('track');
-  const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
-  const pDate = (s) => new Date(s + 'T12:00:00');
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-  const sorted = [...ALL_GAMES].sort((a,b) => pDate(a.date) - pDate(b.date));
-  const past = sorted.filter(g => pDate(g.date) < today);
-  const future = sorted.filter(g => pDate(g.date) >= today);
-
-  // Focus: Last 3 results, and next 5 upcoming
-  const allShow = [...past.slice(-3), ...future.slice(0, 5)];
-
+function buildCards(scoreData) {
+  const track = document.getElementById('games-track');
   track.innerHTML = '';
-  allShow.forEach(game => {
-    const res = scores[game.id] || {};
-    const isPast = pDate(game.date) < today;
-    const isToday = game.date === todayStr;
 
-    let statusHtml = '';
-    const showScores = res.isFinal || res.isLive || (res.awayScore !== undefined);
-
-    if (res.isLive) {
-      statusHtml = `<span class="status-live">${res.statusText}</span>`;
-    } else if (res.isFinal) {
-      statusHtml = `<span class="status-final">${res.statusText}</span>`;
-    } else if (isPast) {
-      statusHtml = `<span class="status-final">Final</span>`;
-    } else {
-      const d = pDate(game.date);
-      statusHtml = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    }
-
+  ALL_GAMES.forEach(game => {
     const card = document.createElement('div');
     card.className = 'game-card';
+    const res = scoreData[game.id] || {};
+    const isPast = new Date(game.date) < new Date().setHours(0,0,0,0);
+
+    // Win/Loss Calculation for Ottawa
+    let resultBadge = '';
+    if (res.isFinal) {
+      const isOttHome = (game.home === 'OTT');
+      const ottScore = isOttHome ? res.homeScore : res.awayScore;
+      const oppScore = isOttHome ? res.awayScore : res.homeScore;
+
+      if (ottScore > oppScore) {
+        resultBadge = '<span class="badge win">W</span>';
+      } else if (ottScore < oppScore) {
+        resultBadge = '<span class="badge loss">L</span>';
+      }
+    }
+
+    const awayWinner = res.isFinal && res.awayScore > res.homeScore;
+    const homeWinner = res.isFinal && res.homeScore > res.awayScore;
+
     card.innerHTML = `
-      <div class="team-row">
-        <span class="team-name">${game.away}</span>
-        <span class="score">${showScores ? (res.awayScore ?? '-') : ''}</span>
+      <div class="game-info">
+        <div class="team-row ${awayWinner ? 'winner' : ''}">
+          <span>${game.away}</span>
+          <span class="score">${res.awayScore !== undefined ? res.awayScore : ''}</span>
+        </div>
+        <div class="team-row ${homeWinner ? 'winner' : ''}">
+          <span>${game.home}</span>
+          <span class="score">${res.homeScore !== undefined ? res.homeScore : ''}</span>
+        </div>
       </div>
-      <div class="team-row">
-        <span class="team-name">${game.home}</span>
-        <span class="score">${showScores ? (res.homeScore ?? '-') : ''}</span>
+      <div class="game-status">
+        ${res.statusText || (isPast ? 'Final' : game.time)}
+        ${resultBadge}
       </div>
-      <div class="status-row">${statusHtml}</div>
     `;
     track.appendChild(card);
   });
-
-  return allShow.length;
 }
 
-let scrollInterval;
 async function init() {
   const scores = await fetchScores();
-  const count = buildCards(scores);
-  document.getElementById('update-label').textContent = 'Live';
-
-  // Ticker animation
-  let offset = 0;
-  const track = document.getElementById('track');
-  if(scrollInterval) clearInterval(scrollInterval);
-
-  scrollInterval = setInterval(() => {
-    offset++;
-    if (offset > count - 4) offset = 0; // Reset if we pass the visible window (4 cards)
-    track.style.transform = `translateX(-${offset * 25}%)`;
-  }, 5000);
+  buildCards(scores);
+  document.getElementById('update-label').textContent = 'Last Updated: ' + new Date().toLocaleTimeString();
 }
 
+// Initial load and refresh every 5 minutes
 init();
-setInterval(init, 300000); // Refresh data every 5 mins
+setInterval(init, 300000);
 </script>
+
 </body>
 </html>
