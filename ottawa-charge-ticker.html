@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ottawa Charge · PWHL</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #0e0e1c;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .ticker-wrap {
+    background: #1a1a2e;
+    border-radius: 8px;
+    overflow: hidden;
+    font-family: 'Arial', sans-serif;
+    user-select: none;
+    width: 100%;
+    max-width: 800px;
+  }
+  .ticker-inner {
+    display: flex;
+    align-items: stretch;
+    height: 80px;
+  }
+  .nav-btn {
+    background: #111122;
+    border: none;
+    color: #aaa;
+    width: 32px;
+    flex-shrink: 0;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+  }
+  .nav-btn:hover { background: #222244; color: #fff; }
+  .games-viewport {
+    flex: 1;
+    overflow: hidden;
+  }
+  .games-track {
+    display: flex;
+    height: 100%;
+    transition: transform 0.25s ease;
+  }
+  .game-card {
+    flex-shrink: 0;
+    height: 80px;
+    border-right: 1px solid #2a2a44;
+    padding: 0 14px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 3px;
+  }
+  .game-card.is-live { border-top: 2px solid #C8102E; }
+  .team-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .team-abbr {
+    font-size: 13px;
+    font-weight: 500;
+    color: #b0b0c8;
+    min-width: 36px;
+    letter-spacing: 0.03em;
+  }
+  .team-abbr.ottawa { color: #ffffff; }
+  .team-score {
+    font-size: 22px;
+    font-weight: 700;
+    color: #ffffff;
+    min-width: 20px;
+    text-align: right;
+    line-height: 1;
+    margin-left: auto;
+  }
+  .team-score.winner { color: #e8c96a; }
+  .game-meta {
+    font-size: 10px;
+    color: #555577;
+    margin-top: 2px;
+    white-space: nowrap;
+  }
+  .status-final { color: #555577; }
+  .status-live { color: #C8102E; font-weight: 600; }
+  .status-upcoming { color: #555577; }
+  .live-dot {
+    display: inline-block;
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: #C8102E;
+    margin-right: 3px;
+    animation: blink 1s step-end infinite;
+  }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .ticker-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #111122;
+    padding: 3px 12px;
+    height: 22px;
+  }
+  .footer-brand {
+    font-size: 9px;
+    color: #333355;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .footer-brand span { color: #C8102E; font-weight: 600; }
+  .footer-refresh {
+    font-size: 10px;
+    color: #333355;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .footer-refresh:hover { color: #aaa; }
+  .loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #333355;
+    font-size: 12px;
+    height: 80px;
+    width: 100%;
+  }
+</style>
+</head>
+<body>
+
+<div class="ticker-wrap">
+  <div class="ticker-inner">
+    <button class="nav-btn" onclick="slide(-1)">&#8249;</button>
+    <div class="games-viewport" id="viewport">
+      <div class="games-track" id="track">
+        <div class="loading-state">Loading Ottawa Charge schedule...</div>
+      </div>
+    </div>
+    <button class="nav-btn" onclick="slide(1)">&#8250;</button>
+  </div>
+  <div class="ticker-footer">
+    <div class="footer-brand">Ottawa <span>Charge</span> &nbsp;·&nbsp; PWHL 2025–26</div>
+    <div class="footer-refresh" onclick="init()">↻ <span id="update-label">refresh</span></div>
+  </div>
+</div>
+
+<script>
+const ALL_GAMES = [
+  { id:232, date:'2025-11-22', away:'NY',  home:'OTT' },
+  { id:233, date:'2025-11-29', away:'OTT', home:'MIN' },
+  { id:236, date:'2025-12-03', away:'OTT', home:'BOS' },
+  { id:238, date:'2025-12-06', away:'MTL', home:'OTT' },
+  { id:241, date:'2025-12-13', away:'TOR', home:'OTT' },
+  { id:243, date:'2025-12-17', away:'OTT', home:'SEA' },
+  { id:246, date:'2025-12-20', away:'OTT', home:'SEA' },
+  { id:248, date:'2025-12-23', away:'OTT', home:'TOR' },
+  { id:250, date:'2025-12-27', away:'BOS', home:'OTT' },
+  { id:253, date:'2026-01-09', away:'VAN', home:'OTT' },
+  { id:257, date:'2026-01-14', away:'OTT', home:'NY'  },
+  { id:261, date:'2026-01-22', away:'OTT', home:'VAN' },
+  { id:264, date:'2026-01-24', away:'OTT', home:'MTL' },
+  { id:268, date:'2026-01-28', away:'SEA', home:'OTT' },
+  { id:273, date:'2026-02-28', away:'BOS', home:'OTT' },
+  { id:277, date:'2026-03-04', away:'SEA', home:'OTT' },
+  { id:279, date:'2026-03-08', away:'OTT', home:'NY'  },
+  { id:284, date:'2026-03-18', away:'OTT', home:'MIN' },
+  { id:286, date:'2026-03-21', away:'OTT', home:'MIN' },
+  { id:303, date:'2026-03-29', away:'OTT', home:'SEA' },
+  { id:306, date:'2026-04-01', away:'TOR', home:'OTT' },
+  { id:282, date:'2026-04-03', away:'MTL', home:'OTT' },
+  { id:311, date:'2026-04-08', away:'SEA', home:'OTT' },
+  { id:313, date:'2026-04-11', away:'OTT', home:'TOR' },
+  { id:319, date:'2026-04-18', away:'NY',  home:'OTT' },
+  { id:324, date:'2026-04-22', away:'OTT', home:'BOS' },
+  { id:328, date:'2026-04-25', away:'TOR', home:'OTT' },
+];
+
+const TEAM_COLORS = {
+  OTT:'#C8102E', NY:'#003087', MIN:'#154734', BOS:'#FFB81C',
+  MTL:'#AF1E2D', TOR:'#307FE2', SEA:'#005C5C', VAN:'#00843D'
+};
+
+function pDate(s){ const[y,m,d]=s.split('-').map(Number); return new Date(y,m-1,d); }
+function fmtShort(s){
+  return pDate(s).toLocaleDateString('en-CA',{month:'short',day:'numeric'});
+}
+
+function teamLogo(abbr){
+  const c = TEAM_COLORS[abbr]||'#555';
+  return `<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><circle cx="10" cy="10" r="9" fill="${c}"/><text x="10" y="13.5" font-size="5.5" font-weight="700" fill="#fff" text-anchor="middle" font-family="Arial,sans-serif">${abbr}</text></svg>`;
+}
+
+let cards = [];
+let startIdx = 0;
+let cardWidth = 130;
+let visibleCount = 5;
+
+function calcVisible(){
+  const vp = document.getElementById('viewport');
+  if(!vp) return;
+  visibleCount = Math.max(1, Math.floor(vp.offsetWidth / 130));
+  cardWidth = Math.floor(vp.offsetWidth / visibleCount);
+}
+
+function slide(dir){
+  const max = Math.max(0, cards.length - visibleCount);
+  startIdx = Math.min(max, Math.max(0, startIdx + dir));
+  renderTrack();
+}
+
+function renderTrack(){
+  const track = document.getElementById('track');
+  if(!track || !cards.length) return;
+  calcVisible();
+  track.innerHTML = '';
+  cards.forEach(c => {
+    const el = document.createElement('div');
+    el.innerHTML = c.html;
+    const card = el.firstElementChild;
+    card.style.width = cardWidth + 'px';
+    card.style.minWidth = cardWidth + 'px';
+    track.appendChild(card);
+  });
+  track.style.transform = `translateX(-${startIdx * cardWidth}px)`;
+}
+
+function buildCards(scoreMap){
+  const today = new Date(); today.setHours(0,0,0,0);
+  const past = ALL_GAMES.filter(g => pDate(g.date) < today);
+  const future = ALL_GAMES.filter(g => pDate(g.date) >= today);
+  const allShow = [...past.slice(-3), ...future.slice(0,5)];
+
+  cards = allShow.map(g => {
+    const res = scoreMap[g.id] || {};
+    const isPast = pDate(g.date) < today;
+    const awayIsOtt = g.away === 'OTT';
+    const homeIsOtt = g.home === 'OTT';
+    const awayScore = res.awayScore;
+    const homeScore = res.homeScore;
+    const awayWon = awayScore !== undefined && homeScore !== undefined && awayScore > homeScore;
+    const homeWon = awayScore !== undefined && homeScore !== undefined && homeScore > awayScore;
+    const showScores = res.isFinal || res.isLive || (isPast && awayScore !== undefined);
+
+    const awayScoreHtml = showScores && awayScore !== undefined
+      ? `<span class="team-score${awayWon?' winner':''}">${awayScore}</span>` : '';
+    const homeScoreHtml = showScores && homeScore !== undefined
+      ? `<span class="team-score${homeWon?' winner':''}">${homeScore}</span>` : '';
+
+    let statusHtml = '';
+    let cardClass = '';
+    if(res.isLive){
+      cardClass = 'is-live';
+      statusHtml = `<span class="status-live"><span class="live-dot"></span>${res.statusText||'Live'}</span>`;
+    } else if(isPast || res.isFinal){
+      statusHtml = `<span class="status-final">${res.statusText||'Final'}</span>`;
+    } else {
+      cardClass = 'is-upcoming';
+      statusHtml = `<span class="status-upcoming">${fmtShort(g.date)}</span>`;
+    }
+
+    const html = `<div class="game-card ${cardClass}">
+      <div class="team-row">
+        ${teamLogo(g.away)}
+        <span class="team-abbr${awayIsOtt?' ottawa':''}">${g.away}</span>
+        ${awayScoreHtml}
+      </div>
+      <div class="team-row">
+        ${teamLogo(g.home)}
+        <span class="team-abbr${homeIsOtt?' ottawa':''}">${g.home}</span>
+        ${homeScoreHtml}
+      </div>
+      <div class="game-meta">${statusHtml}</div>
+    </div>`;
+
+    return { html, isPast, isLive: !!res.isLive };
+  });
+
+  const liveIdx = cards.findIndex(c => c.isLive);
+  const firstFutureIdx = cards.findIndex(c => !c.isPast && !c.isLive);
+  const focusIdx = liveIdx >= 0 ? liveIdx : firstFutureIdx >= 0 ? Math.max(0, firstFutureIdx - 1) : 0;
+  startIdx = Math.max(0, focusIdx - 1);
+  renderTrack();
+}
+
+async function fetchScores(){
+  const url = 'https://www.thepwhl.com/en/teams/ottawa-charge/scores';
+  try {
+    const resp = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+    const data = await resp.json();
+    const html = data.contents;
+    const results = {};
+    html.split(/game-center\//).forEach(chunk => {
+      const idM = chunk.match(/^(\d+)/);
+      if(!idM) return;
+      const id = parseInt(idM[1]);
+      const slice = chunk.slice(0, 800);
+      const isFinal = /Final/i.test(slice);
+      const isLive = /(1st|2nd|3rd)\s*Period|Live|In\s*Progress/i.test(slice);
+      let statusText = null;
+      if(isFinal){
+        statusText = 'Final' + (/Final SO/i.test(slice)?' SO':(/Final OT/i.test(slice)?' OT':''));
+      } else if(isLive){
+        const pm = slice.match(/(1st|2nd|3rd)\s*Period/i);
+        statusText = pm ? pm[1]+' Per' : 'Live';
+      }
+      const nums = [...slice.matchAll(/>(\d+)</g)].map(x=>parseInt(x[1])).filter(n=>n>=0&&n<=15);
+      let awayScore, homeScore;
+      if((isFinal||isLive) && nums.length >= 2){ awayScore=nums[0]; homeScore=nums[1]; }
+      results[id] = { awayScore, homeScore, statusText, isFinal, isLive };
+    });
+    return results;
+  } catch(e){ return {}; }
+}
+
+async function init(){
+  document.getElementById('update-label').textContent = '...';
+  calcVisible();
+  const scoreMap = await fetchScores();
+  buildCards(scoreMap);
+  const now = new Date();
+  document.getElementById('update-label').textContent =
+    now.toLocaleTimeString('en-CA',{hour:'2-digit',minute:'2-digit'});
+}
+
+window.addEventListener('resize', ()=>{ calcVisible(); renderTrack(); });
+
+// Auto-refresh every 5 minutes
+setInterval(init, 5 * 60 * 1000);
+
+init();
+</script>
+</body>
+</html>
