@@ -28,7 +28,7 @@
   .ticker-inner {
     display: flex;
     align-items: stretch;
-    height: 90px;
+    height: 95px; /* Increased height for logos */
   }
   .games-viewport {
     flex: 1;
@@ -40,10 +40,10 @@
     transition: transform 0.5s ease-in-out;
   }
   .game-card {
-    flex: 0 0 200px;
-    height: 90px;
+    flex: 0 0 210px;
+    height: 100%;
     border-right: 1px solid #2a2a44;
-    padding: 10px 15px;
+    padding: 12px 15px;
     display: flex;
     flex-direction: column;
     justify-content: center;
@@ -54,7 +54,13 @@
   .team-row {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 2px;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .team-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   .team-row.winner {
     color: #fff;
@@ -62,6 +68,7 @@
   }
   .score {
     font-variant-numeric: tabular-nums;
+    font-weight: bold;
   }
   .game-status {
     font-size: 11px;
@@ -70,7 +77,7 @@
     margin-top: 4px;
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
   }
   /* Win/Loss Badge Styles */
   .badge {
@@ -78,6 +85,7 @@
     border-radius: 3px;
     font-weight: bold;
     font-size: 10px;
+    margin-left: 5px;
   }
   .win { background: #2e7d32; color: #fff; }
   .loss { background: #c62828; color: #fff; }
@@ -104,15 +112,29 @@
 </div>
 
 <script>
-// Corrected schedule for March 2026 based on official results
+// Corrected schedule and IDs for March 2026 based on official results
 const ALL_GAMES = [
-  { id: 68,  date: '2026-03-04', home: 'OTT', away: 'SEA', time: '7:00 PM' }, // 4-3 W
-  { id: 280, date: '2026-03-08', home: 'NY',  away: 'OTT', time: '3:00 PM' }, // 2-6 L
+  { id: 277, date: '2026-03-04', home: 'OTT', away: 'SEA', time: '7:00 PM' }, // 4-3 W
+  { id: 279, date: '2026-03-08', home: 'NY',  away: 'OTT', time: '3:00 PM' }, // 2-6 L
   { id: 285, date: '2026-03-14', home: 'VAN', away: 'OTT', time: '3:00 PM' }, // 3-2 W (OT)
   { id: 290, date: '2026-03-18', home: 'MIN', away: 'OTT', time: '7:00 PM' }, // 0-5 L
-  { id: 300, date: '2026-03-22', home: 'OTT', away: 'MTL', time: '7:00 PM' }, // 2-1 W (OT) - LAST NIGHT
-  { id: 301, date: '2026-03-29', home: 'SEA', away: 'OTT', time: '7:00 PM' }  // NEXT GAME
+  { id: 295, date: '2026-03-22', home: 'OTT', away: 'MTL', time: '7:00 PM' }, // 2-1 W (OT)
+  { id: 303, date: '2026-03-29', home: 'SEA', away: 'OTT', time: '7:00 PM' }  // Next Game
 ];
+
+const TEAM_COLORS = {
+  'OTT': '#C8102E', 'MTL': '#862633', 'MIN': '#4A2A2A',
+  'NY': '#003366', 'SEA': '#006400', 'VAN': '#00205B',
+  'TOR': '#00205B', 'BOS': '#FFD700'
+};
+
+function teamLogo(abbr) {
+  const color = TEAM_COLORS[abbr] || '#555';
+  return `<svg width="22" height="22" viewBox="0 0 24 24" style="border-radius:50%">
+    <circle cx="12" cy="12" r="11" fill="${color}"/>
+    <text x="12" y="16" font-size="9" font-weight="900" fill="#fff" text-anchor="middle" font-family="sans-serif">${abbr}</text>
+  </svg>`;
+}
 
 async function fetchScores() {
   const url = 'https://www.thepwhl.com/en/scores';
@@ -123,12 +145,12 @@ async function fetchScores() {
     const html = data.contents;
     const results = {};
 
-    // Split by Game Center links to isolate each game's data block
+    // Split by Game Center links to isolate each game block
     html.split(/game-center\//).forEach(chunk => {
       const idM = chunk.match(/^(\d+)/);
       if(!idM) return;
       const id = parseInt(idM[1]);
-      const slice = chunk.slice(0, 1000);
+      const slice = chunk.slice(0, 1200); // Larger slice to capture scores
 
       const isFinal = /Final|FINAL/i.test(slice);
       const isLive = /(1st|2nd|3rd|OT|SO)\s*Period|Live|In\s*Progress/i.test(slice);
@@ -143,12 +165,12 @@ async function fetchScores() {
         statusText = pm ? pm[0] : 'Live';
       }
 
-      // Improved score extraction: looks for numbers wrapped in standard tags
+      // Find all numbers within tags like >1<
       const nums = [...slice.matchAll(/>(\d+)</g)].map(x => parseInt(x[1])).filter(n => n >= 0 && n <= 15);
 
       let awayScore, homeScore;
-      // PWHL site typically lists Away then Home in scoreboards
       if((isFinal || isLive) && nums.length >= 2) {
+        // PWHL lists Away then Home in scoreboards
         awayScore = nums[0];
         homeScore = nums[1];
       }
@@ -172,7 +194,7 @@ function buildCards(scoreData) {
     const res = scoreData[game.id] || {};
     const isPast = new Date(game.date) < new Date().setHours(0,0,0,0);
 
-    // Win/Loss Calculation for Ottawa
+    // Ottawa Win/Loss Logic
     let resultBadge = '';
     if (res.isFinal) {
       const isOttHome = (game.home === 'OTT');
@@ -190,18 +212,22 @@ function buildCards(scoreData) {
     const homeWinner = res.isFinal && res.homeScore > res.awayScore;
 
     card.innerHTML = `
-      <div class="game-info">
-        <div class="team-row ${awayWinner ? 'winner' : ''}">
+      <div class="team-row ${awayWinner ? 'winner' : ''}">
+        <div class="team-info">
+          ${teamLogo(game.away)}
           <span>${game.away}</span>
-          <span class="score">${res.awayScore !== undefined ? res.awayScore : ''}</span>
         </div>
-        <div class="team-row ${homeWinner ? 'winner' : ''}">
+        <span class="score">${res.awayScore !== undefined ? res.awayScore : ''}</span>
+      </div>
+      <div class="team-row ${homeWinner ? 'winner' : ''}">
+        <div class="team-info">
+          ${teamLogo(game.home)}
           <span>${game.home}</span>
-          <span class="score">${res.homeScore !== undefined ? res.homeScore : ''}</span>
         </div>
+        <span class="score">${res.homeScore !== undefined ? res.homeScore : ''}</span>
       </div>
       <div class="game-status">
-        ${res.statusText || (isPast ? 'Final' : game.time)}
+        <span>${res.statusText || (isPast ? 'Final' : game.time)}</span>
         ${resultBadge}
       </div>
     `;
@@ -210,14 +236,14 @@ function buildCards(scoreData) {
 }
 
 async function init() {
+  document.getElementById('update-label').textContent = 'Updating...';
   const scores = await fetchScores();
   buildCards(scores);
   document.getElementById('update-label').textContent = 'Last Updated: ' + new Date().toLocaleTimeString();
 }
 
-// Initial load and refresh every 5 minutes
 init();
-setInterval(init, 300000);
+setInterval(init, 300000); // Refresh every 5 minutes
 </script>
 
 </body>
