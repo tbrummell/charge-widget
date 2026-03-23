@@ -143,6 +143,7 @@
 </div>
 
 <script>
+// Added the missing March 22nd game entry
 const ALL_GAMES = [
   { id:232, date:'2025-11-22', away:'NY',  home:'OTT' },
   { id:233, date:'2025-11-29', away:'OTT', home:'MIN' },
@@ -163,6 +164,7 @@ const ALL_GAMES = [
   { id:279, date:'2026-03-08', away:'OTT', home:'NY'  },
   { id:284, date:'2026-03-18', away:'OTT', home:'MIN' },
   { id:286, date:'2026-03-21', away:'OTT', home:'MIN' },
+  { id:290, date:'2026-03-22', away:'OTT', home:'MIN' }, // Added game from last night
   { id:303, date:'2026-03-29', away:'OTT', home:'SEA' },
   { id:306, date:'2026-04-01', away:'TOR', home:'OTT' },
   { id:282, date:'2026-04-03', away:'MTL', home:'OTT' },
@@ -189,18 +191,14 @@ function teamLogo(abbr){
 }
 
 let cards = [];
-let startIdx = 0;
-let cardWidth = 130;
-let visibleCount = 5;
+let cardWidth = 140;
 
 function calcVisible(){
   const vp = document.getElementById('viewport');
   if(!vp) return;
-  visibleCount = cards.length || 5;
-  cardWidth = Math.floor(vp.offsetWidth / visibleCount);
+  const count = cards.length || 5;
+  cardWidth = Math.floor(vp.offsetWidth / count);
 }
-
-function slide(dir){}
 
 function renderTrack(){
   const track = document.getElementById('track');
@@ -216,37 +214,37 @@ function renderTrack(){
     card.style.flex = '1';
     track.appendChild(card);
   });
-  track.style.transform = '';
 }
 
 function buildCards(scoreMap){
-  const today = new Date(); today.setHours(0,0,0,0);
-  const past = ALL_GAMES.filter(g => pDate(g.date) < today);
-  const future = ALL_GAMES.filter(g => pDate(g.date) >= today);
-  const allShow = [...past.slice(-3), ...future.slice(0,5)];
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Fix: Always sort first to ensure slice works correctly
+  const sorted = [...ALL_GAMES].sort((a,b) => pDate(a.date) - pDate(b.date));
+
+  const past = sorted.filter(g => pDate(g.date) < today);
+  const future = sorted.filter(g => pDate(g.date) >= today);
+
+  // Adjusted slice to show last 2 and next 3
+  const allShow = [...past.slice(-2), ...future.slice(0,3)];
 
   cards = allShow.map(g => {
     const res = scoreMap[g.id] || {};
     const isPast = pDate(g.date) < today;
-    const awayIsOtt = g.away === 'OTT';
-    const homeIsOtt = g.home === 'OTT';
-    const awayScore = res.awayScore;
-    const homeScore = res.homeScore;
-    const awayWon = awayScore !== undefined && homeScore !== undefined && awayScore > homeScore;
-    const homeWon = awayScore !== undefined && homeScore !== undefined && homeScore > awayScore;
-    const showScores = res.isFinal || res.isLive || (isPast && awayScore !== undefined);
+    const showScores = res.isFinal || res.isLive || (isPast && res.awayScore !== undefined);
 
-    const awayScoreHtml = showScores && awayScore !== undefined
-      ? `<span class="team-score${awayWon?' winner':''}">${awayScore}</span>` : '';
-    const homeScoreHtml = showScores && homeScore !== undefined
-      ? `<span class="team-score${homeWon?' winner':''}">${homeScore}</span>` : '';
+    const awayScoreHtml = showScores && res.awayScore !== undefined
+      ? `<span class="team-score${res.awayScore > res.homeScore ?' winner':''}">${res.awayScore}</span>` : '';
+    const homeScoreHtml = showScores && res.homeScore !== undefined
+      ? `<span class="team-score${res.homeScore > res.awayScore ?' winner':''}">${res.homeScore}</span>` : '';
 
     let statusHtml = '';
     let cardClass = '';
     if(res.isLive){
       cardClass = 'is-live';
       statusHtml = `<span class="status-live"><span class="live-dot"></span>${res.statusText||'Live'}</span>`;
-    } else if(isPast || res.isFinal){
+    } else if(res.isFinal || isPast){
       statusHtml = `<span class="status-final">${res.statusText||'Final'}</span>`;
     } else {
       cardClass = 'is-upcoming';
@@ -256,18 +254,18 @@ function buildCards(scoreMap){
     const html = `<div class="game-card ${cardClass}">
       <div class="team-row">
         ${teamLogo(g.away)}
-        <span class="team-abbr${awayIsOtt?' ottawa':''}">${g.away}</span>
+        <span class="team-abbr${g.away==='OTT'?' ottawa':''}">${g.away}</span>
         ${awayScoreHtml}
       </div>
       <div class="team-row">
         ${teamLogo(g.home)}
-        <span class="team-abbr${homeIsOtt?' ottawa':''}">${g.home}</span>
+        <span class="team-abbr${g.home==='OTT'?' ottawa':''}">${g.home}</span>
         ${homeScoreHtml}
       </div>
       <div class="game-meta">${statusHtml}</div>
     </div>`;
 
-    return { html, isPast, isLive: !!res.isLive };
+    return { html };
   });
 
   renderTrack();
@@ -276,7 +274,8 @@ function buildCards(scoreMap){
 async function fetchScores(){
   const url = 'https://www.thepwhl.com/en/teams/ottawa-charge/scores';
   try {
-    const resp = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+    // Added timestamp to URL to bypass proxy caching
+    const resp = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}&t=${Date.now()}`);
     const data = await resp.json();
     const html = data.contents;
     const results = {};
@@ -284,17 +283,17 @@ async function fetchScores(){
       const idM = chunk.match(/^(\d+)/);
       if(!idM) return;
       const id = parseInt(idM[1]);
-      const slice = chunk.slice(0, 800);
-      const isFinal = /Final/i.test(slice);
+      const slice = chunk.slice(0, 1000);
+      const isFinal = /Final|FINAL/i.test(slice);
       const isLive = /(1st|2nd|3rd)\s*Period|Live|In\s*Progress/i.test(slice);
-      let statusText = null;
-      if(isFinal){
-        statusText = 'Final' + (/Final SO/i.test(slice)?' SO':(/Final OT/i.test(slice)?' OT':''));
-      } else if(isLive){
+      let statusText = isFinal ? 'Final' : null;
+
+      if(isLive){
         const pm = slice.match(/(1st|2nd|3rd)\s*Period/i);
         statusText = pm ? pm[1]+' Per' : 'Live';
       }
-      const nums = [...slice.matchAll(/>(\d+)</g)].map(x=>parseInt(x[1])).filter(n=>n>=0&&n<=15);
+
+      const nums = [...slice.matchAll(/>(\d{1,2})</g)].map(x=>parseInt(x[1])).filter(n=>n>=0&&n<=15);
       let awayScore, homeScore;
       if((isFinal||isLive) && nums.length >= 2){ awayScore=nums[0]; homeScore=nums[1]; }
       results[id] = { awayScore, homeScore, statusText, isFinal, isLive };
@@ -305,7 +304,6 @@ async function fetchScores(){
 
 async function init(){
   document.getElementById('update-label').textContent = '...';
-  calcVisible();
   const scoreMap = await fetchScores();
   buildCards(scoreMap);
   const now = new Date();
@@ -313,11 +311,8 @@ async function init(){
     now.toLocaleTimeString('en-CA',{hour:'2-digit',minute:'2-digit'});
 }
 
-window.addEventListener('resize', ()=>{ calcVisible(); renderTrack(); });
-
-// Auto-refresh every 5 minutes
+window.addEventListener('resize', ()=>{ renderTrack(); });
 setInterval(init, 5 * 60 * 1000);
-
 init();
 </script>
 </body>
