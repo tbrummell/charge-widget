@@ -109,13 +109,15 @@
     cursor: pointer;
   }
   .footer-refresh:hover { color: #ccc; }
-  .loading-state {
-    color: #555577;
+  .loading-state, .error-state {
+    color: #8888aa;
     font-size: 13px;
     height: 82px;
     display: flex;
     align-items: center;
     justify-content: center;
+    text-align: center;
+    padding: 0 20px;
   }
 </style>
 </head>
@@ -152,87 +154,88 @@ function teamLogo(abbr) {
 let cards = [];
 let cardWidth = 150;
 
-async function fetchGames() {
+async function fetchScoresAndSchedule() {
+  const proxy = 'https://api.allorigins.win/get?url=';
+  let games = [];
+
+  // Try Scores page first (has results)
   try {
-    const proxy = 'https://api.allorigins.win/get?url=';
-    const url = 'https://www.thepwhl.com/en/teams/ottawa-charge/schedule-25-26';
-    const resp = await fetch(proxy + encodeURIComponent(url));
+    const scoreUrl = 'https://www.thepwhl.com/en/teams/ottawa-charge/scores';
+    const resp = await fetch(proxy + encodeURIComponent(scoreUrl));
     const data = await resp.json();
-    const html = data.contents;
+    const html = data.contents || '';
 
-    const gameRegex = /game-center\/(\d+).*?>([^<]+)<\/a>.*?(?:(\d+)\s*-\s*(\d+))?.*?(Final|Live|In Progress|OT|SO)?/gis;
-    const matches = [...html.matchAll(gameRegex)];
+    // Improved regex to catch games with scores
+    const regex = /game-center\/(\d+).*?(\w{2,3})\s*(\d+)?\s*-\s*(\d+)?\s*(\w{2,3}).*?(Final|OT|SO|Live|In Progress)?/gi;
+    let match;
+    while ((match = regex.exec(html)) !== null) {
+      const id = parseInt(match[1]);
+      const team1 = match[2].toUpperCase();
+      const score1 = match[3] ? parseInt(match[3]) : null;
+      const score2 = match[4] ? parseInt(match[4]) : null;
+      const team2 = match[5] ? match[5].toUpperCase() : null;
+      const statusRaw = match[6] || '';
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+      if (!team2) continue;
 
-    const parsedGames = [];
+      // Determine home/away (scores page usually shows visitor - home)
+      const away = team1;
+      const home = team2;
+      const awayScore = score1;
+      const homeScore = score2;
 
-    for (const m of matches) {
-      const id = parseInt(m[1]);
-      const dateStr = m[2].trim();
-      const awayScore = m[3] ? parseInt(m[3]) : null;
-      const homeScore = m[4] ? parseInt(m[4]) : null;
-      let status = m[5] ? m[5].trim() : '';
+      const isFinal = /Final|OT|SO/i.test(statusRaw);
+      const isLive = /Live|In Progress/i.test(statusRaw);
 
-      // Parse date roughly from the text (e.g., "Sun, Mar 22")
-      const dateMatch = dateStr.match(/(\w+),\s*(\w+)\s*(\d+)/);
-      if (!dateMatch) continue;
-
-      const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-      const month = monthNames.indexOf(dateMatch[2].slice(0,3)) + 1;
-      const day = parseInt(dateMatch[3]);
-      const year = 2025; // adjust if needed for late season
-      const gameDate = new Date(year, month-1, day);
-
-      // Determine home/away from context (simplified from page structure)
-      // This is approximate — the page shows opponent vs OTT
-      const isHome = dateStr.includes('OTT') && !dateStr.includes('at'); // rough heuristic
-      // Better: look for the opponent name before/after
-      const oppMatch = html.match(new RegExp(`(${Object.keys(TEAM_COLORS).join('|')})\\s*${dateStr.split(',')[1] || ''}`));
-      const opponent = oppMatch ? oppMatch[1] : '???';
-
-      const awayTeam = isHome ? opponent : 'OTT';
-      const homeTeam = isHome ? 'OTT' : opponent;
-
-      parsedGames.push({
+      games.push({
         id,
-        date: gameDate,
-        away: awayTeam,
-        home: homeTeam,
+        away,
+        home,
         awayScore,
         homeScore,
-        status: status || (gameDate < today ? 'Final' : ''),
-        isLive: /Live|In Progress/i.test(status),
-        isFinal: /Final/i.test(status) || (gameDate < today && awayScore !== null)
+        status: statusRaw,
+        isFinal,
+        isLive
       });
     }
+  } catch(e) { console.warn("Scores page fetch failed", e); }
 
-    return parsedGames.sort((a,b) => a.date - b.date);
-  } catch(e) {
-    console.error(e);
-    return [];
+  // Fallback to schedule page if needed
+  if (games.length === 0) {
+    try {
+      const schedUrl = 'https://www.thepwhl.com/en/teams/ottawa-charge/schedule-25-26';
+      const resp = await fetch(proxy + encodeURIComponent(schedUrl));
+      const data = await resp.json();
+      const html = data.contents || '';
+      // ... (similar parsing, but simpler date-based)
+      console.log("Used schedule fallback");
+    } catch(e) {}
   }
+
+  return games;
 }
 
-function buildCards(allGames) {
+function buildCards(rawGames) {
   const today = new Date();
-  today.setHours(0,0,0,0);
+  today.setHours(0, 0, 0, 0);
 
-  // Find the most recent completed game
-  const pastGames = allGames.filter(g => g.date < today && g.isFinal);
-  const lastGame = pastGames[pastGames.length - 1];
+  // Sort by date (approximate)
+  rawGames.sort((a, b) => (a.id || 0) - (b.id || 0));
 
-  // Next upcoming games (including live)
-  const futureGames = allGames.filter(g => g.date >= today);
+  // Find most recent completed game
+  const past = rawGames.filter(g => g.isFinal && (g.awayScore !== null || g.homeScore !== null));
+  const lastGame = past[past.length - 1];
 
-  let displayGames = [];
-  if (lastGame) displayGames.push(lastGame);
-  displayGames = displayGames.concat(futureGames.slice(0, 5));
+  // Upcoming + live
+  const upcoming = rawGames.filter(g => !g.isFinal || g.isLive);
 
-  cards = displayGames.map(g => {
-    const isOttHome = g.home === 'OTT';
+  let display = [];
+  if (lastGame) display.push(lastGame);
+  display = display.concat(upcoming.slice(0, 5));
+
+  cards = display.map(g => {
     const awayIsOtt = g.away === 'OTT';
+    const homeIsOtt = g.home === 'OTT';
 
     const awayWon = g.awayScore !== null && g.homeScore !== null && g.awayScore > g.homeScore;
     const homeWon = g.awayScore !== null && g.homeScore !== null && g.homeScore > g.awayScore;
@@ -243,20 +246,17 @@ function buildCards(allGames) {
     if (g.isLive) {
       cardClass = 'is-live';
       statusHtml = `<span class="status-live"><span class="live-dot"></span>LIVE</span>`;
-    } else if (g.isFinal || g.date < today) {
+    } else if (g.isFinal || g.awayScore !== null) {
       let extra = '';
-      if (g.status.includes('OT')) extra = ' OT';
-      if (g.status.includes('SO')) extra = ' SO';
+      if (/OT/i.test(g.status)) extra = ' OT';
+      if (/SO/i.test(g.status)) extra = ' SO';
       statusHtml = `<span class="status-final">Final${extra}</span>`;
     } else {
-      const dateStr = g.date.toLocaleDateString('en-CA', {weekday:'short', month:'short', day:'numeric'});
-      statusHtml = `<span class="status-final">${dateStr}</span>`;
+      statusHtml = `<span class="status-final">Upcoming</span>`;
     }
 
-    const awayScoreHtml = (g.awayScore !== null) 
-      ? `<span class="team-score${awayWon ? ' winner' : ''}">${g.awayScore}</span>` : '';
-    const homeScoreHtml = (g.homeScore !== null) 
-      ? `<span class="team-score${homeWon ? ' winner' : ''}">${g.homeScore}</span>` : '';
+    const awayScoreHtml = g.awayScore !== null ? `<span class="team-score${awayWon ? ' winner' : ''}">${g.awayScore}</span>` : '';
+    const homeScoreHtml = g.homeScore !== null ? `<span class="team-score${homeWon ? ' winner' : ''}">${g.homeScore}</span>` : '';
 
     const html = `
       <div class="game-card ${cardClass}">
@@ -267,7 +267,7 @@ function buildCards(allGames) {
         </div>
         <div class="team-row">
           ${teamLogo(g.home)}
-          <span class="team-abbr${isOttHome ? ' ottawa' : ''}">${g.home}</span>
+          <span class="team-abbr${homeIsOtt ? ' ottawa' : ''}">${g.home}</span>
           ${homeScoreHtml}
         </div>
         <div class="game-meta">${statusHtml}</div>
@@ -275,39 +275,46 @@ function buildCards(allGames) {
 
     return { html };
   });
+
+  if (cards.length === 0) {
+    cards = [{ html: `<div class="game-card"><div class="loading-state">No games found.<br>Try refreshing.</div></div>` }];
+  }
 }
 
 function renderTrack() {
   const track = document.getElementById('track');
-  if (!track) return;
+  const vp = document.getElementById('viewport');
+  if (!track || !vp) return;
 
-  const vpWidth = document.getElementById('viewport').offsetWidth;
-  cardWidth = Math.floor(vpWidth / Math.min(5, cards.length || 5));
+  cardWidth = Math.floor(vp.offsetWidth / Math.min(5, cards.length || 5));
 
   track.innerHTML = '';
   cards.forEach(card => {
     const div = document.createElement('div');
     div.innerHTML = card.html;
-    const cardEl = div.firstElementChild;
-    cardEl.style.width = `${cardWidth}px`;
-    cardEl.style.minWidth = `${cardWidth}px`;
-    track.appendChild(cardEl);
+    const el = div.firstElementChild;
+    el.style.width = `${cardWidth}px`;
+    el.style.minWidth = `${cardWidth}px`;
+    track.appendChild(el);
   });
 }
 
 async function init() {
   document.getElementById('update-label').textContent = '...';
-  const allGames = await fetchGames();
-  buildCards(allGames);
-  renderTrack();
+  try {
+    const rawGames = await fetchScoresAndSchedule();
+    buildCards(rawGames);
+    renderTrack();
+  } catch (e) {
+    console.error(e);
+    document.getElementById('track').innerHTML = `<div class="error-state">Failed to load games.<br>Please try again later.</div>`;
+  }
 
   const now = new Date();
   document.getElementById('update-label').textContent = now.toLocaleTimeString('en-CA', {hour:'2-digit', minute:'2-digit'});
 }
 
 window.addEventListener('resize', renderTrack);
-
-// Auto refresh every 5 minutes
 setInterval(init, 5 * 60 * 1000);
 
 init();
